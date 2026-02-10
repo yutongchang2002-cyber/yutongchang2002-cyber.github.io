@@ -324,7 +324,7 @@
         let appearedTags = new Set(); // 已出现的Tag（抽过才显示）
 
         // ====================== 第二步：加载JSON文件 ======================
-        // 加载daily.json文件（核心：解决代码行数过多问题）
+        // 加载lfpickup.json文件（核心：解决代码行数过多问题）
         fetch('lfpickup.json')
             .then(response => {
                 if (!response.ok) throw new Error("JSON文件加载失败");
@@ -337,7 +337,7 @@
             })
             .catch(error => {
                 console.error("加载失败：", error);
-                alert("日常池加载失败，请检查daily.json文件是否正确上传");
+                alert("日常池加载失败，请检查lfpickup.json文件是否正确上传");
             });
 
         // ====================== 第三步：本地数据库操作 ======================
