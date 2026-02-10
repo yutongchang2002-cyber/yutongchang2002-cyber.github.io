@@ -422,7 +422,7 @@
             scene: ["九木酒屋", "雾港仓库", "幻日排练室", "福源堂"]
         };
 
-        // 2. 全局变量（新增倒计时相关）
+        // 2. 全局变量（移除倒计时/重新抽取相关变量）
         let INIT_EVENTS = []; // 从JSON加载的事件池
         let remainingEvents = []; // 剩余可抽事件
         let drawnEvents = []; // 已抽事件
@@ -432,8 +432,6 @@
         let appearedTags = new Set(); // 已出现的Tag（抽过才显示）
         let drawnEventIds = new Set(); // 记录已抽过的事件ID（避免重复）
         let allEventIds = []; // 所有事件的ID列表
-        let countdownTimer = null; // 倒计时定时器
-        let isResetting = false; // 是否处于重置倒计时状态
 
         // ====================== 第二步：加载JSON文件 ======================
         fetch('lfpickup.json')
@@ -446,7 +444,7 @@
                 INIT_EVENTS = INIT_EVENTS.map((event, index) => ({
                     id: `event_${index + 1}`,
                     text: event.text,
-                    tags: event.tags || [] // 兜底：避免tags为undefined
+                    tags: event.tags
                 }));
                 initDB();
                 initTagList();
@@ -460,15 +458,12 @@
 
         // ====================== 第三步：本地数据库操作 ======================
         function initDB() {
-            // 初始化时清空appearedTags，避免旧数据干扰
-            appearedTags.clear();
-            
             const savedEvents = localStorage.getItem("ocDailyEvents");
             if (!savedEvents) {
                 const eventsWithMeta = INIT_EVENTS.map((event) => ({
                     id: event.id,
                     text: event.text,
-                    tags: event.tags || [],
+                    tags: event.tags,
                     createTime: new Date().toLocaleString()
                 }));
                 localStorage.setItem("ocDailyEvents", JSON.stringify(eventsWithMeta));
@@ -476,23 +471,13 @@
             } else {
                 remainingEvents = JSON.parse(savedEvents);
             }
-            
             initTagRecommend();
-            
             const savedDrawnEvents = localStorage.getItem("ocDrawnEvents");
             if (savedDrawnEvents) {
                 drawnEvents = JSON.parse(savedDrawnEvents);
-                // 只收集已抽事件中存在的Tag（过滤无效Tag）
                 drawnEvents.forEach(event => {
-                    (event.tags || []).forEach(tag => {
-                        // 只添加TAG_CATEGORIES里存在的Tag，避免脏数据
-                        const isTagValid = Object.values(TAG_CATEGORIES).some(cat => cat.includes(tag));
-                        if (isTagValid) {
-                            appearedTags.add(tag);
-                        }
-                    });
+                    event.tags.forEach(tag => appearedTags.add(tag));
                 });
-                // 显示已出现的Tag（仅显示抽到的）
                 showAppearedTags();
                 renderHistoryList(drawnEvents);
             }
@@ -505,16 +490,7 @@
         function saveDrawnEventToDB(event) {
             drawnEvents.push(event);
             localStorage.setItem("ocDrawnEvents", JSON.stringify(drawnEvents));
-            
-            // 只收集当前抽到的、且在TAG_CATEGORIES里的Tag
-            (event.tags || []).forEach(tag => {
-                const isTagValid = Object.values(TAG_CATEGORIES).some(cat => cat.includes(tag));
-                if (isTagValid) {
-                    appearedTags.add(tag);
-                }
-            });
-            
-            // 只显示本次抽到的Tag，而非所有已出现的
+            event.tags.forEach(tag => appearedTags.add(tag));
             showAppearedTags();
         }
 
@@ -526,7 +502,7 @@
             drawnEvents = [];
             selectedTags = [];
             filterLogic = "and";
-            appearedTags.clear(); // 清空已出现的Tag
+            appearedTags.clear();
             drawnEventIds.clear();
             document.getElementById("andSwitch").classList.add("active");
             document.getElementById("orSwitch").classList.remove("active");
@@ -558,9 +534,8 @@
             progressText.textContent = `本轮进度：${drawnEventIds.size}/${allEventIds.length}`;
         }
 
-        // ====================== 第五步：Tag按需显示（核心修复） ======================
+        // ====================== 第五步：Tag按需显示 ======================
         function initTagList() {
-            // 渲染所有Tag，但默认隐藏
             renderTagList("roleTagList", TAG_CATEGORIES.role, "tag-role");
             renderTagList("orgTagList", TAG_CATEGORIES.org, "tag-org");
             renderTagList("sceneTagList", TAG_CATEGORIES.scene, "tag-scene");
@@ -569,42 +544,20 @@
         function renderTagList(containerId, tags, className) {
             const container = document.getElementById(containerId);
             container.innerHTML = "";
-            
             tags.forEach(tag => {
-                // 生成安全的ID（替换特殊字符，避免匹配失败）
-                const safeTagId = `tag-${tag.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}`;
-                
                 const tagItem = document.createElement("div");
                 tagItem.className = `tag-item ${className}`;
                 tagItem.textContent = tag;
-                tagItem.id = safeTagId; // 使用安全ID
-                tagItem.dataset.tag = tag; // 存储原始Tag名称
+                tagItem.id = `tag-${tag}`;
                 tagItem.onclick = () => toggleTagSelection(tag, tagItem);
                 container.appendChild(tagItem);
             });
         }
 
-        // 修复：只显示抽到的Tag，其他保持隐藏
         function showAppearedTags() {
-            // 先隐藏所有Tag
-            document.querySelectorAll(".tag-item").forEach(item => {
-                item.style.display = "none";
-            });
-            
-            // 只显示抽到的Tag
             appearedTags.forEach(tag => {
-                // 根据安全ID查找，或通过data-tag匹配
-                const safeTagId = `tag-${tag.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}`;
-                let tagElement = document.getElementById(safeTagId);
-                
-                // 兜底：如果ID匹配失败，通过data-tag查找
-                if (!tagElement) {
-                    tagElement = document.querySelector(`.tag-item[data-tag="${tag}"]`);
-                }
-                
-                if (tagElement) {
-                    tagElement.style.display = "inline-block";
-                }
+                const tagElement = document.getElementById(`tag-${tag}`);
+                if (tagElement) tagElement.style.display = "inline-block";
             });
         }
 
@@ -622,10 +575,8 @@
 
         function initTagRecommend() {
             const allEvents = getAllEventsFromDB();
-            tagRecommendMap = {}; // 重置推荐映射
-            
             allEvents.forEach(event => {
-                const tags = event.tags || [];
+                const tags = event.tags;
                 tags.forEach(tag1 => {
                     if (!tagRecommendMap[tag1]) tagRecommendMap[tag1] = {};
                     tags.forEach(tag2 => {
@@ -641,26 +592,15 @@
             document.querySelectorAll(".tag-item").forEach(item => {
                 item.classList.remove("recommend");
             });
-            
             const recommendTags = tagRecommendMap[activeTag];
             if (!recommendTags) return;
-            
             const sortedTags = Object.entries(recommendTags)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 3)
                 .map(item => item[0]);
-            
             sortedTags.forEach(tag => {
-                const safeTagId = `tag-${tag.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}`;
-                let tagElement = document.getElementById(safeTagId);
-                
-                if (!tagElement) {
-                    tagElement = document.querySelector(`.tag-item[data-tag="${tag}"]`);
-                }
-                
-                if (tagElement) {
-                    tagElement.classList.add("recommend");
-                }
+                const tagElement = document.getElementById(`tag-${tag}`);
+                if (tagElement) tagElement.classList.add("recommend");
             });
         }
 
@@ -676,11 +616,11 @@
             if (selectedTags.length > 0) {
                 if (filterLogic === "and") {
                     filteredEvents = filteredEvents.filter(event => 
-                        (event.tags || []).every(tag => selectedTags.includes(tag))
+                        selectedTags.every(tag => event.tags.includes(tag))
                     );
                 } else {
                     filteredEvents = filteredEvents.filter(event => 
-                        (event.tags || []).some(tag => selectedTags.includes(tag))
+                        selectedTags.some(tag => event.tags.includes(tag))
                     );
                 }
             }
@@ -699,53 +639,19 @@
             renderHistoryList(drawnEvents);
         }
 
-        // ====================== 第六步：抽签核心功能 ======================
+        // ====================== 第六步：抽签核心功能（重点修改） ======================
         function drawLottery() {
             const drawBtn = document.getElementById("drawBtn");
             const resultElement = document.getElementById("result");
             
-            // 如果是“重新抽取”状态，先重置再抽签
-            if (drawBtn.textContent === "重新抽取") {
-                // 重置所有状态
-                drawnEventIds.clear();
-                saveDrawnIds();
-                updateRemainingEvents();
-                // 恢复按钮文字和状态
-                drawBtn.textContent = "抽一张";
-                drawBtn.disabled = false;
-                // 清空结果框，显示提示
-                resultElement.classList.remove("show");
-                document.getElementById("hint").style.display = "block";
-                isResetting = false;
-                return;
-            }
-
             document.getElementById("hint").style.display = "none";
             
             if (remainingEvents.length === 0) {
-                // 1. 按钮变灰不可点击
+                // 1. 按钮永久变灰不可点击
                 drawBtn.disabled = true;
-                // 2. 显示指定文案
-                resultElement.textContent = "更多未来正在发生——";
+                // 2. 显示指定文案，换行展示提示语
+                resultElement.innerHTML = "更多未来正在发生！<br/>可点击已记录便签及Tags进行分类浏览";
                 resultElement.classList.add("show");
-                // 3. 标记为重置状态
-                isResetting = true;
-                // 4. 启动10秒倒计时
-                let countdown = 10;
-                countdownTimer = setInterval(() => {
-                    countdown--;
-                    // 显示倒计时文案
-                    resultElement.textContent = `更多未来正在发生—— ${countdown}s`;
-                    // 倒计时结束
-                    if (countdown <= 0) {
-                        clearInterval(countdownTimer);
-                        // 恢复按钮可点击，文字改为“重新抽取”
-                        drawBtn.disabled = false;
-                        drawBtn.textContent = "重新抽取";
-                        // 最终文案
-                        resultElement.textContent = "更多未来正在发生——";
-                    }
-                }, 1000);
                 return;
             }
 
@@ -780,7 +686,7 @@
                 
                 const tagBadge = document.createElement("div");
                 tagBadge.className = "history-tag-badge";
-                (event.tags || []).forEach(tag => {
+                event.tags.forEach(tag => {
                     const tagSpan = document.createElement("span");
                     tagSpan.className = "history-tag";
                     tagSpan.textContent = tag;
@@ -809,19 +715,14 @@
         }
 
         function clearAllHistory() {
-            // 清除倒计时定时器（如果存在）
-            if (countdownTimer) clearInterval(countdownTimer);
             clearDB();
             document.getElementById("result").classList.remove("show");
             document.getElementById("hint").style.display = "block";
+            // 销毁记录后恢复按钮可点击
             const drawBtn = document.getElementById("drawBtn");
             drawBtn.disabled = false;
-            drawBtn.textContent = "抽一张"; // 恢复按钮文字
-            isResetting = false;
             clearAllFilter();
             renderHistoryList([]);
-            
-            // 清空后隐藏所有Tag
             document.querySelectorAll(".tag-item").forEach(item => {
                 item.style.display = "none";
             });
