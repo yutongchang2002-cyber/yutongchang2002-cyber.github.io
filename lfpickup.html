@@ -403,27 +403,6 @@
 <div class="clear-btn-wrapper">
     <button class="clear-btn" onclick="confirmClearHistory()">销毁所有便签</button>
 </div>
-
-    <!-- 历史记录抽屉 -->
-    <div class="drawer-container">
-        <div class="drawer-header" onclick="toggleDrawer('historyDrawer')">
-            <div class="drawer-title">📝 已记录的便签</div>
-            <div class="drawer-arrow" id="historyDrawerArrow"></div>
-        </div>
-        <div class="drawer-content" id="historyDrawerContent">
-            <div class="history-section">
-                <div class="history-title">
-                    <span>历史记录</span>
-                    <span class="clear-filter-btn" onclick="clearAllFilter()">取消便签筛选</span>
-                </div>
-                <div class="history-list" id="historyList">
-                    <div class="empty-history">还没抽过便签哦～</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
         // ====================== 第一步：初始化数据和配置 ======================
         // 1. 基础Tag分类（你可以在这里扩展）
         const TAG_CATEGORIES = {
