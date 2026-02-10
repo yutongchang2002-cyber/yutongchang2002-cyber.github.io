@@ -346,7 +346,7 @@
     <!-- Tag筛选抽屉 -->
     <div class="drawer-container">
         <div class="drawer-header" onclick="toggleDrawer('tagDrawer')">
-            <div class="drawer-title">✨ 按Tag筛选日常</div>
+            <div class="drawer-title">✨ 按Tag筛选便签</div>
             <div class="drawer-arrow" id="tagDrawerArrow"></div>
         </div>
         <div class="drawer-content" id="tagDrawerContent">
@@ -415,14 +415,14 @@
 
     <script>
         // ====================== 第一步：初始化数据和配置 ======================
-        // 1. 基础Tag分类（修复了中文引号问题）
+        // 1. 基础Tag分类
         const TAG_CATEGORIES = {
             role: ["杂鱼", "肆", "小林哲也", "北原真辉", "松本悠真", "凌", "渡边晴南", "Sophia", "Léona", "Noo", "Lee", "竹本律", "Adriana", "Felix", "Olivia", "Wesley", "Sasa", "Marcel"],
             org: ["竹本会","幻日乐队"],
             scene: ["九木酒屋", "雾港仓库", "幻日排练室", "福源堂"]
         };
 
-        // 2. 全局变量
+        // 2. 全局变量（新增倒计时相关）
         let INIT_EVENTS = []; // 从JSON加载的事件池
         let remainingEvents = []; // 剩余可抽事件
         let drawnEvents = []; // 已抽事件
@@ -432,9 +432,10 @@
         let appearedTags = new Set(); // 已出现的Tag（抽过才显示）
         let drawnEventIds = new Set(); // 记录已抽过的事件ID（避免重复）
         let allEventIds = []; // 所有事件的ID列表
+        let countdownTimer = null; // 倒计时定时器
+        let isResetting = false; // 是否处于重置倒计时状态
 
         // ====================== 第二步：加载JSON文件 ======================
-        // 加载lfpickup.json文件（核心：解决代码行数过多问题）
         fetch('lfpickup.json')
             .then(response => {
                 if (!response.ok) throw new Error("JSON文件加载失败");
@@ -442,16 +443,15 @@
             })
             .then(data => {
                 INIT_EVENTS = data;
-                // 给每个事件添加唯一ID（关键：避免重复的核心）
                 INIT_EVENTS = INIT_EVENTS.map((event, index) => ({
-                    id: `event_${index + 1}`, // 生成唯一ID：event_1、event_2...
+                    id: `event_${index + 1}`,
                     text: event.text,
                     tags: event.tags
                 }));
-                initDB(); // 初始化数据库
-                initTagList(); // 初始化Tag列表（默认隐藏）
-                initEventIds(); // 初始化防重复ID列表
-                updateProgress(); // 初始化进度显示
+                initDB();
+                initTagList();
+                initEventIds();
+                updateProgress();
             })
             .catch(error => {
                 console.error("加载失败：", error);
@@ -459,11 +459,9 @@
             });
 
         // ====================== 第三步：本地数据库操作 ======================
-        // 1. 初始化数据库
         function initDB() {
             const savedEvents = localStorage.getItem("ocDailyEvents");
             if (!savedEvents) {
-                // 给初始事件加ID和时间
                 const eventsWithMeta = INIT_EVENTS.map((event) => ({
                     id: event.id,
                     text: event.text,
@@ -475,96 +473,76 @@
             } else {
                 remainingEvents = JSON.parse(savedEvents);
             }
-            // 初始化Tag推荐
             initTagRecommend();
-            // 读取已抽事件，更新已出现的Tag
             const savedDrawnEvents = localStorage.getItem("ocDrawnEvents");
             if (savedDrawnEvents) {
                 drawnEvents = JSON.parse(savedDrawnEvents);
-                // 收集已抽事件的Tag
                 drawnEvents.forEach(event => {
                     event.tags.forEach(tag => appearedTags.add(tag));
                 });
-                // 显示已出现的Tag
                 showAppearedTags();
                 renderHistoryList(drawnEvents);
             }
         }
 
-        // 2. 从数据库读取所有事件
         function getAllEventsFromDB() {
             return JSON.parse(localStorage.getItem("ocDailyEvents")) || [];
         }
 
-        // 3. 保存事件到数据库
         function saveDrawnEventToDB(event) {
             drawnEvents.push(event);
             localStorage.setItem("ocDrawnEvents", JSON.stringify(drawnEvents));
-            // 记录本次抽到的Tag
             event.tags.forEach(tag => appearedTags.add(tag));
-            // 显示新出现的Tag
             showAppearedTags();
         }
 
-        // 4. 清空数据库
         function clearDB() {
             localStorage.removeItem("ocDailyEvents");
             localStorage.removeItem("ocDrawnEvents");
-            localStorage.removeItem("ocDrawnEventIds"); // 清空已抽ID记录
+            localStorage.removeItem("ocDrawnEventIds");
             remainingEvents = [];
             drawnEvents = [];
             selectedTags = [];
             filterLogic = "and";
-            appearedTags.clear(); // 清空已出现的Tag
-            drawnEventIds.clear(); // 清空已抽ID
+            appearedTags.clear();
+            drawnEventIds.clear();
             document.getElementById("andSwitch").classList.add("active");
             document.getElementById("orSwitch").classList.remove("active");
-            initDB(); // 重新初始化
-            updateProgress(); // 更新进度
+            initDB();
+            updateProgress();
         }
 
         // ====================== 第四步：防重复抽签逻辑 ======================
-        // 初始化防重复ID列表
         function initEventIds() {
-            allEventIds = INIT_EVENTS.map(event => event.id); // 提取所有事件ID
-            // 从本地存储恢复已抽ID（单设备永久保留，除非清理缓存）
+            allEventIds = INIT_EVENTS.map(event => event.id);
             const savedDrawnIds = localStorage.getItem("ocDrawnEventIds");
             if (savedDrawnIds) {
                 drawnEventIds = new Set(JSON.parse(savedDrawnIds));
             }
-            // 更新剩余事件（过滤已抽ID）
             updateRemainingEvents();
         }
 
-        // 更新剩余可抽事件
         function updateRemainingEvents() {
             remainingEvents = INIT_EVENTS.filter(event => !drawnEventIds.has(event.id));
-            updateProgress(); // 更新进度提示
+            updateProgress();
         }
 
-        // 保存已抽ID到本地存储（单设备永久保留）
         function saveDrawnIds() {
             localStorage.setItem("ocDrawnEventIds", JSON.stringify(Array.from(drawnEventIds)));
         }
 
-        // 更新抽签进度提示
         function updateProgress() {
             const progressText = document.getElementById("progressText");
             progressText.textContent = `本轮进度：${drawnEventIds.size}/${allEventIds.length}`;
         }
 
         // ====================== 第五步：Tag按需显示 ======================
-        // 1. 初始化Tag列表（默认隐藏）
         function initTagList() {
-            // 生成角色Tag
             renderTagList("roleTagList", TAG_CATEGORIES.role, "tag-role");
-            // 生成组织Tag
             renderTagList("orgTagList", TAG_CATEGORIES.org, "tag-org");
-            // 生成场景Tag
             renderTagList("sceneTagList", TAG_CATEGORIES.scene, "tag-scene");
         }
 
-        // 2. 渲染Tag列表（默认隐藏）
         function renderTagList(containerId, tags, className) {
             const container = document.getElementById(containerId);
             container.innerHTML = "";
@@ -572,13 +550,12 @@
                 const tagItem = document.createElement("div");
                 tagItem.className = `tag-item ${className}`;
                 tagItem.textContent = tag;
-                tagItem.id = `tag-${tag}`; // 给每个Tag加唯一ID
+                tagItem.id = `tag-${tag}`;
                 tagItem.onclick = () => toggleTagSelection(tag, tagItem);
                 container.appendChild(tagItem);
             });
         }
 
-        // 3. 显示已出现的Tag（抽过才显示）
         function showAppearedTags() {
             appearedTags.forEach(tag => {
                 const tagElement = document.getElementById(`tag-${tag}`);
@@ -586,7 +563,6 @@
             });
         }
 
-        // 4. 切换Tag选中状态
         function toggleTagSelection(tag, element) {
             if (selectedTags.includes(tag)) {
                 selectedTags = selectedTags.filter(t => t !== tag);
@@ -599,7 +575,6 @@
             filterEvents();
         }
 
-        // 5. 初始化Tag推荐
         function initTagRecommend() {
             const allEvents = getAllEventsFromDB();
             allEvents.forEach(event => {
@@ -615,7 +590,6 @@
             });
         }
 
-        // 6. 高亮推荐Tag
         function highlightRecommendTags(activeTag) {
             document.querySelectorAll(".tag-item").forEach(item => {
                 item.classList.remove("recommend");
@@ -632,7 +606,6 @@
             });
         }
 
-        // 7. 切换筛选逻辑
         function switchLogic(logic) {
             filterLogic = logic;
             document.getElementById("andSwitch").classList.toggle("active", logic === "and");
@@ -640,7 +613,6 @@
             filterEvents();
         }
 
-        // 8. 筛选事件
         function filterEvents() {
             let filteredEvents = [...drawnEvents];
             if (selectedTags.length > 0) {
@@ -657,7 +629,6 @@
             renderHistoryList(filteredEvents);
         }
 
-        // 9. 清除所有筛选
         function clearAllFilter() {
             selectedTags = [];
             document.querySelectorAll(".tag-item").forEach(item => {
@@ -670,30 +641,59 @@
             renderHistoryList(drawnEvents);
         }
 
-        // ====================== 第六步：抽签核心功能 ======================
-        // 1. 抽签逻辑
+        // ====================== 第六步：抽签核心功能（重点修改） ======================
         function drawLottery() {
-            document.getElementById("hint").style.display = "none";
+            const drawBtn = document.getElementById("drawBtn");
             const resultElement = document.getElementById("result");
             
-            if (remainingEvents.length === 0) {
-                resultElement.textContent = "🎉 本轮便签已全部归档，便签盒已重置～";
-                resultElement.classList.add("show");
-                // 重置：清空已抽ID，重新初始化
+            // 如果是“重新抽取”状态，先重置再抽签
+            if (drawBtn.textContent === "重新抽取") {
+                // 重置所有状态
                 drawnEventIds.clear();
                 saveDrawnIds();
                 updateRemainingEvents();
-                // 延迟1秒后恢复抽签功能（可选，提升体验）
-                setTimeout(() => {
-                    resultElement.textContent = "点击按钮继续抽取！";
-                }, 1500);
+                // 恢复按钮文字和状态
+                drawBtn.textContent = "抽一张";
+                drawBtn.disabled = false;
+                // 清空结果框，显示提示
+                resultElement.classList.remove("show");
+                document.getElementById("hint").style.display = "block";
+                isResetting = false;
+                return;
+            }
+
+            document.getElementById("hint").style.display = "none";
+            
+            if (remainingEvents.length === 0) {
+                // 1. 按钮变灰不可点击
+                drawBtn.disabled = true;
+                // 2. 显示指定文案
+                resultElement.textContent = "更多未来正在发生——";
+                resultElement.classList.add("show");
+                // 3. 标记为重置状态
+                isResetting = true;
+                // 4. 启动10秒倒计时
+                let countdown = 10;
+                countdownTimer = setInterval(() => {
+                    countdown--;
+                    // 显示倒计时文案
+                    resultElement.textContent = `更多未来正在发生—— ${countdown}s`;
+                    // 倒计时结束
+                    if (countdown <= 0) {
+                        clearInterval(countdownTimer);
+                        // 恢复按钮可点击，文字改为“重新抽取”
+                        drawBtn.disabled = false;
+                        drawBtn.textContent = "重新抽取";
+                        // 最终文案
+                        resultElement.textContent = "更多未来正在发生——请点击Tags查看分类便签：）";
+                    }
+                }, 1000);
                 return;
             }
 
             const randomIndex = Math.floor(Math.random() * remainingEvents.length);
             const selectedEvent = remainingEvents[randomIndex];
             
-            // 记录已抽ID
             drawnEventIds.add(selectedEvent.id);
             saveDrawnIds();
             updateRemainingEvents();
@@ -704,7 +704,6 @@
             filterEvents();
         }
 
-        // 2. 渲染历史列表
         function renderHistoryList(events) {
             const historyList = document.getElementById("historyList");
             historyList.innerHTML = "";
@@ -737,7 +736,6 @@
         }
 
         // ====================== 第七步：交互优化 ======================
-        // 1. 抽屉展开/收起
         function toggleDrawer(drawerName) {
             const content = document.getElementById(`${drawerName}Content`);
             const arrow = document.getElementById(`${drawerName}Arrow`);
@@ -745,7 +743,6 @@
             arrow.classList.toggle("expanded");
         }
 
-        // 2. 清空记录二次确认
         function confirmClearHistory() {
             if (confirm("⚠️ ⚠️ 确认销毁所有已阅便签记录？\n此操作不可恢复，且仅清空本设备记录！")) {
                 clearAllHistory();
@@ -753,15 +750,18 @@
             }
         }
 
-        // 3. 清空所有记录（整合逻辑）
         function clearAllHistory() {
+            // 清除倒计时定时器（如果存在）
+            if (countdownTimer) clearInterval(countdownTimer);
             clearDB();
             document.getElementById("result").classList.remove("show");
             document.getElementById("hint").style.display = "block";
-            document.getElementById("drawBtn").disabled = false;
+            const drawBtn = document.getElementById("drawBtn");
+            drawBtn.disabled = false;
+            drawBtn.textContent = "抽一张"; // 恢复按钮文字
+            isResetting = false;
             clearAllFilter();
             renderHistoryList([]);
-            // 隐藏所有Tag
             document.querySelectorAll(".tag-item").forEach(item => {
                 item.style.display = "none";
             });
