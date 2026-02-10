@@ -668,7 +668,7 @@
                 // 1. 按钮变灰不可点击
                 drawBtn.disabled = true;
                 // 2. 显示指定文案
-                resultElement.textContent = "更多未来正在发生——";
+                resultElement.textContent = "便签盒空空如也——可点击Tags查看分类便签：）";
                 resultElement.classList.add("show");
                 // 3. 标记为重置状态
                 isResetting = true;
@@ -677,7 +677,7 @@
                 countdownTimer = setInterval(() => {
                     countdown--;
                     // 显示倒计时文案
-                    resultElement.textContent = `更多未来正在发生—— ${countdown}s`;
+                    resultElement.textContent = `便签盒空空如也——可点击Tags查看分类便签：）${countdown}s`;
                     // 倒计时结束
                     if (countdown <= 0) {
                         clearInterval(countdownTimer);
@@ -685,7 +685,7 @@
                         drawBtn.disabled = false;
                         drawBtn.textContent = "重新抽取";
                         // 最终文案
-                        resultElement.textContent = "更多未来正在发生——请点击Tags查看分类便签：）";
+                        resultElement.textContent = "更多未来正在发生";
                     }
                 }, 1000);
                 return;
