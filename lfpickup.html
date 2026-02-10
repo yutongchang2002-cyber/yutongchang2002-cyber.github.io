@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LF今天发生了什么</title>
+    <title>Wesley的便签盒</title>
     <style>
         * {
             margin: 0;
@@ -18,6 +18,14 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+        }
+        /* 提示说明文本 */
+        .tips-text {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 10px;
+            text-align: center;
+            line-height: 1.5;
         }
         /* 签盒样式 */
         .lottery-box {
@@ -52,15 +60,22 @@
         .result.show {
             opacity: 1;
         }
+        /* 进度提示 */
+        .progress-text {
+            font-size: 14px;
+            color: #666;
+            margin: 10px 0;
+        }
         /* 按钮组 */
         .btn-group {
             display: flex;
             gap: 15px;
-            margin-bottom: 30px;
+            margin-bottom: 10px;
             flex-wrap: wrap;
             justify-content: center;
+            align-items: center;
         }
-        .btn {
+        .draw-btn {
             padding: 12px 36px;
             background-color: #e8ded2;
             border: none;
@@ -70,21 +85,74 @@
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        .btn:hover {
+        .draw-btn:hover {
             background-color: #d8c9bc;
             transform: scale(1.05);
         }
-        .btn:disabled {
+        .draw-btn:disabled {
             background-color: #eee;
             color: #999;
             cursor: not-allowed;
             transform: none;
         }
-        /* Tag筛选区 */
-        .tag-filter-section {
+        /* 清理按钮：小、红色提醒 */
+        .clear-btn {
+            padding: 6px 18px; /* 缩小尺寸 */
+            background-color: #f8e0e0;
+            border: 1px solid #e88080;
+            border-radius: 20px;
+            color: #d33a3a; /* 红色提醒 */
+            font-size: 14px; /* 缩小字体 */
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .clear-btn:hover {
+            background-color: #f5d0d0;
+        }
+        /* 抽屉样式核心 */
+        .drawer-container {
             width: 90%;
             max-width: 700px;
-            margin-bottom: 25px;
+            margin-bottom: 15px;
+            border: 1px solid #e0d8d0;
+            border-radius: 16px;
+            background-color: #fff;
+            overflow: hidden;
+        }
+        .drawer-header {
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            border-bottom: 1px solid #f5f2ef;
+        }
+        .drawer-title {
+            font-size: 16px;
+            color: #5a5045;
+            font-weight: 500;
+        }
+        .drawer-arrow {
+            width: 16px;
+            height: 16px;
+            border-top: 2px solid #999;
+            border-right: 2px solid #999;
+            transform: rotate(135deg);
+            transition: transform 0.3s ease;
+        }
+        .drawer-arrow.expanded {
+            transform: rotate(315deg);
+        }
+        .drawer-content {
+            padding: 15px 20px;
+            display: none; /* 默认收起 */
+        }
+        .drawer-content.expanded {
+            display: block;
+        }
+        /* Tag筛选区（抽屉内） */
+        .tag-filter-section {
+            width: 100%;
         }
         .filter-header {
             display: flex;
@@ -172,15 +240,14 @@
             border: 2px solid #f5c76f;
             box-shadow: 0 0 0 2px rgba(245,199,111,0.2);
         }
-        /* 历史记录区 */
+        /* 历史记录区（抽屉内） */
         .history-section {
-            width: 90%;
-            max-width: 700px;
-            padding: 20px;
-            border: 1px solid #e0d8d0;
-            border-radius: 16px;
-            background-color: #fff;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.03);
+            width: 100%;
+            padding: 0;
+            border: none;
+            border-radius: 0;
+            background-color: transparent;
+            box-shadow: none;
         }
         .history-title {
             font-size: 17px;
@@ -236,72 +303,100 @@
             .result {
                 font-size: 20px;
             }
-            .btn {
+            .draw-btn {
                 padding: 10px 24px;
                 font-size: 16px;
+            }
+            .clear-btn {
+                padding: 4px 14px;
+                font-size: 12px;
             }
         }
     </style>
 </head>
 <body>
+    <!-- 缓存提示说明 -->
+    <div class="tips-text">
+        💡 提示：本便签盒为 Wesley 本地私藏，清理浏览器缓存会遗失所有情报碎片，仅本设备留存，不跨设备同步
+    </div>
+
     <!-- 抽签盒 -->
     <div class="lottery-box">
-        <div class="hint" id="hint">点击下方按钮，掉落LF碎片📰～</div>
+        <div class="hint" id="hint">点击下方掏掏外套口袋，会掉出什么呢？</div>
         <div class="result" id="result"></div>
     </div>
 
+    <!-- 抽签进度 -->
+    <div class="progress-text" id="progressText">本轮进度：0/0</div>
+
     <!-- 功能按钮 -->
     <div class="btn-group">
-        <button class="btn" onclick="drawLottery()" id="drawBtn">抽一条</button>
-        <button class="btn" onclick="clearAllHistory()">清空所有记录</button>
+        <button class="draw-btn" onclick="drawLottery()" id="drawBtn">抽一张</button>
+        <button class="clear-btn" onclick="confirmClearHistory()">销毁所有便签</button> <!-- 改小+红色 -->
     </div>
 
-    <!-- Tag筛选区 -->
-    <div class="tag-filter-section">
-        <div class="filter-header">
-            <div class="filter-title">✨ 按Tag筛选日常</div>
-            <div class="logic-switch">
-                <span>筛选逻辑：</span>
-                <div class="switch-btn active" id="andSwitch" onclick="switchLogic('and')">且</div>
-                <div class="switch-btn" id="orSwitch" onclick="switchLogic('or')">或</div>
-            </div>
+    <!-- Tag筛选抽屉 -->
+    <div class="drawer-container">
+        <div class="drawer-header" onclick="toggleDrawer('tagDrawer')">
+            <div class="drawer-title">✨ 按Tag筛选日常</div>
+            <div class="drawer-arrow" id="tagDrawerArrow"></div>
         </div>
-
-        <div class="tag-categories">
-            <!-- 角色Tag -->
-            <div class="tag-category">
-                <div class="category-name">🎭 角色</div>
-                <div class="tag-list" id="roleTagList">
-                    <!-- JS自动生成 -->
+        <div class="drawer-content" id="tagDrawerContent">
+            <div class="tag-filter-section">
+                <div class="filter-header">
+                    <div class="filter-title">筛选逻辑</div>
+                    <div class="logic-switch">
+                        <span>筛选逻辑：</span>
+                        <div class="switch-btn active" id="andSwitch" onclick="switchLogic('and')">且</div>
+                        <div class="switch-btn" id="orSwitch" onclick="switchLogic('or')">或</div>
+                    </div>
                 </div>
-            </div>
 
-            <!-- 组织Tag -->
-            <div class="tag-category">
-                <div class="category-name">🏢 组织</div>
-                <div class="tag-list" id="orgTagList">
-                    <!-- JS自动生成 -->
-                </div>
-            </div>
+                <div class="tag-categories">
+                    <!-- 角色Tag -->
+                    <div class="tag-category">
+                        <div class="category-name">🏃🏻‍♂️ 市民</div>
+                        <div class="tag-list" id="roleTagList">
+                            <!-- JS自动生成 -->
+                        </div>
+                    </div>
 
-            <!-- 场景Tag -->
-            <div class="tag-category">
-                <div class="category-name">📍 场景</div>
-                <div class="tag-list" id="sceneTagList">
-                    <!-- JS自动生成 -->
+                    <!-- 组织Tag -->
+                    <div class="tag-category">
+                        <div class="category-name">🧑‍🧑‍🧒‍🧒 组织</div>
+                        <div class="tag-list" id="orgTagList">
+                            <!-- JS自动生成 -->
+                        </div>
+                    </div>
+
+                    <!-- 场景Tag -->
+                    <div class="tag-category">
+                        <div class="category-name">📍 场景</div>
+                        <div class="tag-list" id="sceneTagList">
+                            <!-- JS自动生成 -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 历史记录区 -->
-    <div class="history-section">
-        <div class="history-title">
-            <span>📝 抽过的日常小事</span>
-            <span class="clear-filter-btn" onclick="clearAllFilter()">清除筛选</span>
+    <!-- 历史记录抽屉 -->
+    <div class="drawer-container">
+        <div class="drawer-header" onclick="toggleDrawer('historyDrawer')">
+            <div class="drawer-title">📝 已记录的便签</div>
+            <div class="drawer-arrow" id="historyDrawerArrow"></div>
         </div>
-        <div class="history-list" id="historyList">
-            <div class="empty-history">还没抽过签哦～</div>
+        <div class="drawer-content" id="historyDrawerContent">
+            <div class="history-section">
+                <div class="history-title">
+                    <span>历史记录</span>
+                    <span class="clear-filter-btn" onclick="clearAllFilter()">取消便签筛选</span>
+                </div>
+                <div class="history-list" id="historyList">
+                    <div class="empty-history">还没抽过便签哦～</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -310,8 +405,8 @@
         // 1. 基础Tag分类（你可以在这里扩展）
         const TAG_CATEGORIES = {
             role: ["杂鱼", "肆", "小林哲也", "北原真辉", "松本悠真", "凌", "渡边晴南", "Sophia", "Léona", "Noo", "Lee", "竹本律", "Adriana", "Felix", "Olivia", "Wesley", "Sasa", "Marcel"],
-            org: ["竹本会", "学生会", "乐队", "咖啡店搭子"],
-            scene: ["便利店", "咖啡店", "公园", "食堂", "公交站", "小区", "书店"]
+            org: ["竹本会","幻日乐队"],
+            scene: ["九木酒屋", "雾港仓库", "幻日排练室", “福源堂”]
         };
 
         // 2. 全局变量
@@ -322,6 +417,8 @@
         let filterLogic = "and"; // 筛选逻辑：and/or
         let tagRecommendMap = {}; // Tag推荐映射
         let appearedTags = new Set(); // 已出现的Tag（抽过才显示）
+        let drawnEventIds = new Set(); // 记录已抽过的事件ID（避免重复）
+        let allEventIds = []; // 所有事件的ID列表
 
         // ====================== 第二步：加载JSON文件 ======================
         // 加载lfpickup.json文件（核心：解决代码行数过多问题）
@@ -332,8 +429,16 @@
             })
             .then(data => {
                 INIT_EVENTS = data;
+                // 给每个事件添加唯一ID（关键：避免重复的核心）
+                INIT_EVENTS = INIT_EVENTS.map((event, index) => ({
+                    id: `event_${index + 1}`, // 生成唯一ID：event_1、event_2...
+                    text: event.text,
+                    tags: event.tags
+                }));
                 initDB(); // 初始化数据库
                 initTagList(); // 初始化Tag列表（默认隐藏）
+                initEventIds(); // 初始化防重复ID列表
+                updateProgress(); // 初始化进度显示
             })
             .catch(error => {
                 console.error("加载失败：", error);
@@ -346,8 +451,8 @@
             const savedEvents = localStorage.getItem("ocDailyEvents");
             if (!savedEvents) {
                 // 给初始事件加ID和时间
-                const eventsWithMeta = INIT_EVENTS.map((event, index) => ({
-                    id: index + 1,
+                const eventsWithMeta = INIT_EVENTS.map((event) => ({
+                    id: event.id,
                     text: event.text,
                     tags: event.tags,
                     createTime: new Date().toLocaleString()
@@ -392,17 +497,50 @@
         function clearDB() {
             localStorage.removeItem("ocDailyEvents");
             localStorage.removeItem("ocDrawnEvents");
+            localStorage.removeItem("ocDrawnEventIds"); // 清空已抽ID记录
             remainingEvents = [];
             drawnEvents = [];
             selectedTags = [];
             filterLogic = "and";
             appearedTags.clear(); // 清空已出现的Tag
+            drawnEventIds.clear(); // 清空已抽ID
             document.getElementById("andSwitch").classList.add("active");
             document.getElementById("orSwitch").classList.remove("active");
             initDB(); // 重新初始化
+            updateProgress(); // 更新进度
         }
 
-        // ====================== 第四步：Tag按需显示（核心功能） ======================
+        // ====================== 第四步：防重复抽签逻辑 ======================
+        // 初始化防重复ID列表
+        function initEventIds() {
+            allEventIds = INIT_EVENTS.map(event => event.id); // 提取所有事件ID
+            // 从本地存储恢复已抽ID（单设备永久保留，除非清理缓存）
+            const savedDrawnIds = localStorage.getItem("ocDrawnEventIds");
+            if (savedDrawnIds) {
+                drawnEventIds = new Set(JSON.parse(savedDrawnIds));
+            }
+            // 更新剩余事件（过滤已抽ID）
+            updateRemainingEvents();
+        }
+
+        // 更新剩余可抽事件
+        function updateRemainingEvents() {
+            remainingEvents = INIT_EVENTS.filter(event => !drawnEventIds.has(event.id));
+            updateProgress(); // 更新进度提示
+        }
+
+        // 保存已抽ID到本地存储（单设备永久保留）
+        function saveDrawnIds() {
+            localStorage.setItem("ocDrawnEventIds", JSON.stringify(Array.from(drawnEventIds)));
+        }
+
+        // 更新抽签进度提示
+        function updateProgress() {
+            const progressText = document.getElementById("progressText");
+            progressText.textContent = `本轮进度：${drawnEventIds.size}/${allEventIds.length}`;
+        }
+
+        // ====================== 第五步：Tag按需显示 ======================
         // 1. 初始化Tag列表（默认隐藏）
         function initTagList() {
             // 生成角色Tag
@@ -519,25 +657,35 @@
             renderHistoryList(drawnEvents);
         }
 
-        // ====================== 第五步：抽签核心功能 ======================
+        // ====================== 第六步：抽签核心功能 ======================
         // 1. 抽签逻辑
         function drawLottery() {
             document.getElementById("hint").style.display = "none";
             const resultElement = document.getElementById("result");
             
             if (remainingEvents.length === 0) {
-                resultElement.textContent = "更多精彩即将发生";
+                resultElement.textContent = "🎉 本轮便签已全部归档，便签盒已重置～";
                 resultElement.classList.add("show");
-                document.getElementById("drawBtn").disabled = true;
+                // 重置：清空已抽ID，重新初始化
+                drawnEventIds.clear();
+                saveDrawnIds();
+                updateRemainingEvents();
+                // 延迟1秒后恢复抽签功能（可选，提升体验）
+                setTimeout(() => {
+                    resultElement.textContent = "点击按钮继续抽取！";
+                }, 1500);
                 return;
             }
 
             const randomIndex = Math.floor(Math.random() * remainingEvents.length);
             const selectedEvent = remainingEvents[randomIndex];
             
-            remainingEvents.splice(randomIndex, 1);
-            saveDrawnEventToDB(selectedEvent);
+            // 记录已抽ID
+            drawnEventIds.add(selectedEvent.id);
+            saveDrawnIds();
+            updateRemainingEvents();
             
+            saveDrawnEventToDB(selectedEvent);
             resultElement.textContent = selectedEvent.text;
             resultElement.classList.add("show");
             filterEvents();
@@ -549,7 +697,7 @@
             historyList.innerHTML = "";
             
             if (events.length === 0) {
-                historyList.innerHTML = '<div class="empty-history">还没抽过签哦～</div>';
+                historyList.innerHTML = '<div class="empty-history">还没抽过便签哦～</div>';
                 return;
             }
             
@@ -575,7 +723,24 @@
             });
         }
 
-        // 3. 清空所有记录
+        // ====================== 第七步：交互优化 ======================
+        // 1. 抽屉展开/收起
+        function toggleDrawer(drawerName) {
+            const content = document.getElementById(`${drawerName}Content`);
+            const arrow = document.getElementById(`${drawerName}Arrow`);
+            content.classList.toggle("expanded");
+            arrow.classList.toggle("expanded");
+        }
+
+        // 2. 清空记录二次确认
+        function confirmClearHistory() {
+            if (confirm("⚠️ ⚠️ 确认销毁所有已阅便签记录？\n此操作不可恢复，且仅清空本设备记录！")) {
+                clearAllHistory();
+                alert("已销毁所有便签记录～");
+            }
+        }
+
+        // 3. 清空所有记录（整合逻辑）
         function clearAllHistory() {
             clearDB();
             document.getElementById("result").classList.remove("show");
