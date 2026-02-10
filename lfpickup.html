@@ -144,6 +144,7 @@
             font-size: 14px;
             cursor: pointer;
             transition: all 0.2s ease;
+            display: none; /* 默认隐藏所有Tag */
         }
         /* Tag样式区分 */
         .tag-role {
@@ -306,66 +307,41 @@
 
     <script>
         // ====================== 第一步：初始化数据和配置 ======================
-        // 1. 基础Tag分类（移除了情绪Tag，你可以在这里扩展）
+        // 1. 基础Tag分类（你可以在这里扩展）
         const TAG_CATEGORIES = {
             role: ["杂鱼", "肆", "小林哲也", "北原真辉", "松本悠真", "凌", "渡边晴南", "Sophia", "Léona", "Noo", "Lee", "竹本律", "Adriana", "Felix", "Olivia", "Wesley", "Sasa", "Marcel"],
             org: ["竹本会", "学生会", "乐队", "咖啡店搭子"],
             scene: ["便利店", "咖啡店", "公园", "食堂", "公交站", "小区", "书店"]
         };
 
-        // 2. OC日常事件池（核心！你在这里加/改日常，已移除情绪Tag）
-        const INIT_EVENTS = [
-            {
-                text: "Noo和Léona一起去吃了汉堡",
-                tags: ["Noo", "Léona", "竹本会", "美食"]
-            },
-            {
-                text: "小林哲也在便利店买了冰可乐",
-                tags: ["小林哲也", "便利店", "夏日"]
-            },
-            {
-                text: "竹本会全员在公园野餐",
-                tags: ["竹本会", "小林哲也", "Noo", "Lee", "公园"]
-            },
-            {
-                text: "渡边晴南和Sophia在咖啡店聊了一下午",
-                tags: ["渡边晴南", "Sophia", "咖啡店"]
-            },
-            {
-                text: "凌在公交站捡到了Léona掉的发卡",
-                tags: ["凌", "Léona", "公交站"]
-            },
-            {
-                text: "松本悠真和北原真辉在小区遛狗碰到",
-                tags: ["松本悠真", "北原真辉", "小区"]
-            },
-            {
-                text: "竹本律在书店给Adriana推荐了画册",
-                tags: ["竹本律", "Adriana", "竹本会", "书店"]
-            },
-            {
-                text: "Felix和Wesley在食堂拼桌吃拉面",
-                tags: ["Felix", "Wesley", "食堂"]
-            },
-            {
-                text: "Sasa和Marcel喂了公园的流浪猫",
-                tags: ["Sasa", "Marcel", "公园"]
-            },
-            {
-                text: "杂鱼和肆在便利店抢最后一瓶酸奶",
-                tags: ["杂鱼", "肆", "便利店"]
-            }
-        ];
-
-        // 3. 全局变量
+        // 2. 全局变量
+        let INIT_EVENTS = []; // 从JSON加载的事件池
         let remainingEvents = []; // 剩余可抽事件
         let drawnEvents = []; // 已抽事件
         let selectedTags = []; // 选中的Tag
         let filterLogic = "and"; // 筛选逻辑：and/or
         let tagRecommendMap = {}; // Tag推荐映射
+        let appearedTags = new Set(); // 已出现的Tag（抽过才显示）
 
-        // ====================== 第二步：本地数据库操作（核心） ======================
-        // 1. 初始化数据库（首次加载时把初始事件存进去）
+        // ====================== 第二步：加载JSON文件 ======================
+        // 加载daily.json文件（核心：解决代码行数过多问题）
+        fetch('daily.json')
+            .then(response => {
+                if (!response.ok) throw new Error("JSON文件加载失败");
+                return response.json();
+            })
+            .then(data => {
+                INIT_EVENTS = data;
+                initDB(); // 初始化数据库
+                initTagList(); // 初始化Tag列表（默认隐藏）
+            })
+            .catch(error => {
+                console.error("加载失败：", error);
+                alert("日常池加载失败，请检查daily.json文件是否正确上传");
+            });
+
+        // ====================== 第三步：本地数据库操作 ======================
+        // 1. 初始化数据库
         function initDB() {
             const savedEvents = localStorage.getItem("ocDailyEvents");
             if (!savedEvents) {
@@ -383,6 +359,18 @@
             }
             // 初始化Tag推荐
             initTagRecommend();
+            // 读取已抽事件，更新已出现的Tag
+            const savedDrawnEvents = localStorage.getItem("ocDrawnEvents");
+            if (savedDrawnEvents) {
+                drawnEvents = JSON.parse(savedDrawnEvents);
+                // 收集已抽事件的Tag
+                drawnEvents.forEach(event => {
+                    event.tags.forEach(tag => appearedTags.add(tag));
+                });
+                // 显示已出现的Tag
+                showAppearedTags();
+                renderHistoryList(drawnEvents);
+            }
         }
 
         // 2. 从数据库读取所有事件
@@ -390,11 +378,14 @@
             return JSON.parse(localStorage.getItem("ocDailyEvents")) || [];
         }
 
-        // 3. 保存事件到数据库（抽中时调用）
+        // 3. 保存事件到数据库
         function saveDrawnEventToDB(event) {
             drawnEvents.push(event);
-            // 把已抽事件单独存，方便后续统计
             localStorage.setItem("ocDrawnEvents", JSON.stringify(drawnEvents));
+            // 记录本次抽到的Tag
+            event.tags.forEach(tag => appearedTags.add(tag));
+            // 显示新出现的Tag
+            showAppearedTags();
         }
 
         // 4. 清空数据库
@@ -405,13 +396,14 @@
             drawnEvents = [];
             selectedTags = [];
             filterLogic = "and";
+            appearedTags.clear(); // 清空已出现的Tag
             document.getElementById("andSwitch").classList.add("active");
             document.getElementById("orSwitch").classList.remove("active");
             initDB(); // 重新初始化
         }
 
-        // ====================== 第三步：Tag相关功能 ======================
-        // 1. 初始化Tag列表（页面加载时生成Tag按钮）
+        // ====================== 第四步：Tag按需显示（核心功能） ======================
+        // 1. 初始化Tag列表（默认隐藏）
         function initTagList() {
             // 生成角色Tag
             renderTagList("roleTagList", TAG_CATEGORIES.role, "tag-role");
@@ -421,7 +413,7 @@
             renderTagList("sceneTagList", TAG_CATEGORIES.scene, "tag-scene");
         }
 
-        // 2. 渲染Tag列表
+        // 2. 渲染Tag列表（默认隐藏）
         function renderTagList(containerId, tags, className) {
             const container = document.getElementById(containerId);
             container.innerHTML = "";
@@ -429,32 +421,36 @@
                 const tagItem = document.createElement("div");
                 tagItem.className = `tag-item ${className}`;
                 tagItem.textContent = tag;
+                tagItem.id = `tag-${tag}`; // 给每个Tag加唯一ID
                 tagItem.onclick = () => toggleTagSelection(tag, tagItem);
                 container.appendChild(tagItem);
             });
         }
 
-        // 3. 切换Tag选中状态
+        // 3. 显示已出现的Tag（抽过才显示）
+        function showAppearedTags() {
+            appearedTags.forEach(tag => {
+                const tagElement = document.getElementById(`tag-${tag}`);
+                if (tagElement) tagElement.style.display = "inline-block";
+            });
+        }
+
+        // 4. 切换Tag选中状态
         function toggleTagSelection(tag, element) {
             if (selectedTags.includes(tag)) {
-                // 取消选中
                 selectedTags = selectedTags.filter(t => t !== tag);
                 element.classList.remove("selected");
             } else {
-                // 选中
                 selectedTags.push(tag);
                 element.classList.add("selected");
-                // 高亮推荐Tag
                 highlightRecommendTags(tag);
             }
-            // 筛选事件
             filterEvents();
         }
 
-        // 4. 初始化Tag推荐（统计Tag共现频率）
+        // 5. 初始化Tag推荐
         function initTagRecommend() {
             const allEvents = getAllEventsFromDB();
-            // 统计每个Tag和其他Tag的共现次数
             allEvents.forEach(event => {
                 const tags = event.tags;
                 tags.forEach(tag1 => {
@@ -468,31 +464,24 @@
             });
         }
 
-        // 5. 高亮推荐Tag（选中一个Tag后，高亮高频共现的Tag）
+        // 6. 高亮推荐Tag
         function highlightRecommendTags(activeTag) {
-            // 清除所有推荐样式
             document.querySelectorAll(".tag-item").forEach(item => {
                 item.classList.remove("recommend");
             });
-            // 获取推荐Tag
             const recommendTags = tagRecommendMap[activeTag];
             if (!recommendTags) return;
-            // 按频率排序，取前3个
             const sortedTags = Object.entries(recommendTags)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 3)
                 .map(item => item[0]);
-            // 高亮
             sortedTags.forEach(tag => {
-                document.querySelectorAll(".tag-item").forEach(item => {
-                    if (item.textContent === tag) {
-                        item.classList.add("recommend");
-                    }
-                });
+                const tagElement = document.getElementById(`tag-${tag}`);
+                if (tagElement) tagElement.classList.add("recommend");
             });
         }
 
-        // 6. 切换筛选逻辑（且/或）
+        // 7. 切换筛选逻辑
         function switchLogic(logic) {
             filterLogic = logic;
             document.getElementById("andSwitch").classList.toggle("active", logic === "and");
@@ -500,17 +489,15 @@
             filterEvents();
         }
 
-        // 7. 筛选事件
+        // 8. 筛选事件
         function filterEvents() {
             let filteredEvents = [...drawnEvents];
             if (selectedTags.length > 0) {
                 if (filterLogic === "and") {
-                    // 且：同时包含所有选中Tag
                     filteredEvents = filteredEvents.filter(event => 
                         selectedTags.every(tag => event.tags.includes(tag))
                     );
                 } else {
-                    // 或：包含任意一个选中Tag
                     filteredEvents = filteredEvents.filter(event => 
                         selectedTags.some(tag => event.tags.includes(tag))
                     );
@@ -519,29 +506,25 @@
             renderHistoryList(filteredEvents);
         }
 
-        // 8. 清除所有筛选
+        // 9. 清除所有筛选
         function clearAllFilter() {
             selectedTags = [];
-            // 清除Tag选中样式
             document.querySelectorAll(".tag-item").forEach(item => {
                 item.classList.remove("selected");
                 item.classList.remove("recommend");
             });
-            // 重置筛选逻辑
             filterLogic = "and";
             document.getElementById("andSwitch").classList.add("active");
             document.getElementById("orSwitch").classList.remove("active");
-            // 重新渲染所有已抽事件
             renderHistoryList(drawnEvents);
         }
 
-        // ====================== 第四步：抽签核心功能 ======================
+        // ====================== 第五步：抽签核心功能 ======================
         // 1. 抽签逻辑
         function drawLottery() {
             document.getElementById("hint").style.display = "none";
             const resultElement = document.getElementById("result");
             
-            // 检查是否还有剩余事件
             if (remainingEvents.length === 0) {
                 resultElement.textContent = "更多精彩即将发生";
                 resultElement.classList.add("show");
@@ -549,19 +532,14 @@
                 return;
             }
 
-            // 随机选一个事件
             const randomIndex = Math.floor(Math.random() * remainingEvents.length);
             const selectedEvent = remainingEvents[randomIndex];
             
-            // 从剩余池移除，加入已抽池
             remainingEvents.splice(randomIndex, 1);
             saveDrawnEventToDB(selectedEvent);
             
-            // 显示结果
             resultElement.textContent = selectedEvent.text;
             resultElement.classList.add("show");
-            
-            // 更新历史列表
             filterEvents();
         }
 
@@ -579,11 +557,9 @@
                 const item = document.createElement("div");
                 item.className = "history-item";
                 
-                // 事件内容
                 const textDiv = document.createElement("div");
                 textDiv.textContent = event.text;
                 
-                // Tag徽章
                 const tagBadge = document.createElement("div");
                 tagBadge.className = "history-tag-badge";
                 event.tags.forEach(tag => {
@@ -602,29 +578,16 @@
         // 3. 清空所有记录
         function clearAllHistory() {
             clearDB();
-            // 重置界面
             document.getElementById("result").classList.remove("show");
             document.getElementById("hint").style.display = "block";
             document.getElementById("drawBtn").disabled = false;
             clearAllFilter();
             renderHistoryList([]);
+            // 隐藏所有Tag
+            document.querySelectorAll(".tag-item").forEach(item => {
+                item.style.display = "none";
+            });
         }
-
-        // ====================== 第五步：页面初始化 ======================
-        window.onload = function() {
-            initDB();
-            initTagList();
-            // 读取已抽事件
-            const savedDrawnEvents = localStorage.getItem("ocDrawnEvents");
-            if (savedDrawnEvents) {
-                drawnEvents = JSON.parse(savedDrawnEvents);
-                renderHistoryList(drawnEvents);
-            }
-            // 检查剩余事件是否为空
-            if (remainingEvents.length === 0) {
-                document.getElementById("drawBtn").disabled = true;
-            }
-        };
     </script>
 </body>
 </html>
