@@ -67,48 +67,49 @@
             margin: 10px 0;
         }
         /* 按钮组 */
-        .btn-group {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 10px;
-            flex-wrap: wrap;
-            justify-content: center;
-            align-items: center;
-        }
-        .draw-btn {
-            padding: 12px 36px;
-            background-color: #e8ded2;
-            border: none;
-            border-radius: 28px;
-            color: #5a5045;
-            font-size: 18px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        .draw-btn:hover {
-            background-color: #d8c9bc;
-            transform: scale(1.05);
-        }
-        .draw-btn:disabled {
-            background-color: #eee;
-            color: #999;
-            cursor: not-allowed;
-            transform: none;
-        }
-        /* 清理按钮：小、红色提醒 */
-        .clear-btn {
-            padding: 6px 18px; /* 缩小尺寸 */
-            background-color: #f8e0e0;
-            border: 1px solid #e88080;
-            border-radius: 20px;
-            color: #d33a3a; /* 红色提醒 */
-            font-size: 14px; /* 缩小字体 */
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        .clear-btn:hover {
-            background-color: #f5d0d0;
-        }
+       /* 抽一张按钮容器：单独一行、居中 */
+.draw-btn-wrapper {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin: 20px 0; /* 和上下内容拉开距离 */
+}
+/* 抽一张按钮样式（保留原有，确保宽度适配） */
+.draw-btn {
+    padding: 12px 36px;
+    background-color: #e8ded2;
+    border: none;
+    border-radius: 28px;
+    color: #5a5045;
+    font-size: 18px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    /* 去掉原有按钮组的gap影响，单独一行 */
+}
+
+/* 销毁按钮容器：页面最底部、单独一行、居中 */
+.clear-btn-wrapper {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin: 30px 0 20px 0; /* 顶部留足距离，底部留边 */
+}
+/* 销毁按钮样式（保留原有红色提醒，调整间距） */
+.clear-btn {
+    padding: 6px 18px;
+    background-color: #f8e0e0;
+    border: 1px solid #e88080;
+    border-radius: 20px;
+    color: #d33a3a;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+/* 删掉原来的.btn-group样式（如果还有的话），避免干扰 */
+.btn-group {
+    display: none; /* 直接隐藏原有按钮组 */
+}
         /* 抽屉样式核心 */
         .drawer-container {
             width: 90%;
@@ -319,67 +320,89 @@
     <div class="tips-text">
         💡 提示：本便签盒为 Wesley 本地私藏，清理浏览器缓存会遗失所有情报碎片，仅本设备留存，不跨设备同步
     </div>
+<!-- 抽签盒 -->
+<div class="lottery-box">
+    <div class="hint" id="hint">点击下方抽一张...会掉出什么呢？</div>
+    <div class="result" id="result"></div>
+</div>
 
-    <!-- 抽签盒 -->
-    <div class="lottery-box">
-        <div class="hint" id="hint">点击下方掏掏外套口袋，会掉出什么呢？</div>
-        <div class="result" id="result"></div>
+<!-- 抽签进度 -->
+<div class="progress-text" id="progressText">本轮进度：0/0</div>
+
+<!-- 抽一张按钮（单独一行、居中） -->
+<div class="draw-btn-wrapper">
+    <button class="draw-btn" onclick="drawLottery()" id="drawBtn">抽一张</button>
+</div>
+
+<!-- Tag筛选抽屉 -->
+<div class="drawer-container">
+    <div class="drawer-header" onclick="toggleDrawer('tagDrawer')">
+        <div class="drawer-title">✨ 按Tag筛选日常</div>
+        <div class="drawer-arrow" id="tagDrawerArrow"></div>
     </div>
+    <div class="drawer-content" id="tagDrawerContent">
+        <div class="tag-filter-section">
+            <div class="filter-header">
+                <div class="filter-title">筛选逻辑</div>
+                <div class="logic-switch">
+                    <span>筛选逻辑：</span>
+                    <div class="switch-btn active" id="andSwitch" onclick="switchLogic('and')">且</div>
+                    <div class="switch-btn" id="orSwitch" onclick="switchLogic('or')">或</div>
+                </div>
+            </div>
 
-    <!-- 抽签进度 -->
-    <div class="progress-text" id="progressText">本轮进度：0/0</div>
-
-    <!-- 功能按钮 -->
-    <div class="btn-group">
-        <button class="draw-btn" onclick="drawLottery()" id="drawBtn">抽一张</button>
-        <button class="clear-btn" onclick="confirmClearHistory()">销毁所有便签</button> <!-- 改小+红色 -->
-    </div>
-
-    <!-- Tag筛选抽屉 -->
-    <div class="drawer-container">
-        <div class="drawer-header" onclick="toggleDrawer('tagDrawer')">
-            <div class="drawer-title">✨ 按Tag筛选日常</div>
-            <div class="drawer-arrow" id="tagDrawerArrow"></div>
-        </div>
-        <div class="drawer-content" id="tagDrawerContent">
-            <div class="tag-filter-section">
-                <div class="filter-header">
-                    <div class="filter-title">筛选逻辑</div>
-                    <div class="logic-switch">
-                        <span>筛选逻辑：</span>
-                        <div class="switch-btn active" id="andSwitch" onclick="switchLogic('and')">且</div>
-                        <div class="switch-btn" id="orSwitch" onclick="switchLogic('or')">或</div>
+            <div class="tag-categories">
+                <!-- 角色Tag -->
+                <div class="tag-category">
+                    <div class="category-name">🏃🏻‍♂️ 市民</div>
+                    <div class="tag-list" id="roleTagList">
+                        <!-- JS自动生成 -->
                     </div>
                 </div>
 
-                <div class="tag-categories">
-                    <!-- 角色Tag -->
-                    <div class="tag-category">
-                        <div class="category-name">🏃🏻‍♂️ 市民</div>
-                        <div class="tag-list" id="roleTagList">
-                            <!-- JS自动生成 -->
-                        </div>
+                <!-- 组织Tag -->
+                <div class="tag-category">
+                    <div class="category-name">🧑‍🧑‍🧒‍🧒 组织</div>
+                    <div class="tag-list" id="orgTagList">
+                        <!-- JS自动生成 -->
                     </div>
+                </div>
 
-                    <!-- 组织Tag -->
-                    <div class="tag-category">
-                        <div class="category-name">🧑‍🧑‍🧒‍🧒 组织</div>
-                        <div class="tag-list" id="orgTagList">
-                            <!-- JS自动生成 -->
-                        </div>
-                    </div>
-
-                    <!-- 场景Tag -->
-                    <div class="tag-category">
-                        <div class="category-name">📍 场景</div>
-                        <div class="tag-list" id="sceneTagList">
-                            <!-- JS自动生成 -->
-                        </div>
+                <!-- 场景Tag -->
+                <div class="tag-category">
+                    <div class="category-name">📍 场景</div>
+                    <div class="tag-list" id="sceneTagList">
+                        <!-- JS自动生成 -->
                     </div>
                 </div>
             </div>
         </div>
     </div>
+</div>
+
+<!-- 历史记录抽屉 -->
+<div class="drawer-container">
+    <div class="drawer-header" onclick="toggleDrawer('historyDrawer')">
+        <div class="drawer-title">📝 已记录的便签</div>
+        <div class="drawer-arrow" id="historyDrawerArrow"></div>
+    </div>
+    <div class="drawer-content" id="historyDrawerContent">
+        <div class="history-section">
+            <div class="history-title">
+                <span>历史记录</span>
+                <span class="clear-filter-btn" onclick="clearAllFilter()">取消便签筛选</span>
+            </div>
+            <div class="history-list" id="historyList">
+                <div class="empty-history">还没抽过便签哦～</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 销毁所有便签按钮（页面最底部、单独一行、居中） -->
+<div class="clear-btn-wrapper">
+    <button class="clear-btn" onclick="confirmClearHistory()">销毁所有便签</button>
+</div>
 
     <!-- 历史记录抽屉 -->
     <div class="drawer-container">
