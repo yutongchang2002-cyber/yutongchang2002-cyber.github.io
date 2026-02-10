@@ -346,7 +346,7 @@
     <!-- Tag筛选抽屉 -->
     <div class="drawer-container">
         <div class="drawer-header" onclick="toggleDrawer('tagDrawer')">
-            <div class="drawer-title">✨ 按Tag筛选便签</div>
+            <div class="drawer-title">✨ 按Tag筛选日常</div>
             <div class="drawer-arrow" id="tagDrawerArrow"></div>
         </div>
         <div class="drawer-content" id="tagDrawerContent">
@@ -446,7 +446,7 @@
                 INIT_EVENTS = INIT_EVENTS.map((event, index) => ({
                     id: `event_${index + 1}`,
                     text: event.text,
-                    tags: event.tags
+                    tags: event.tags || [] // 兜底：避免tags为undefined
                 }));
                 initDB();
                 initTagList();
@@ -460,12 +460,15 @@
 
         // ====================== 第三步：本地数据库操作 ======================
         function initDB() {
+            // 初始化时清空appearedTags，避免旧数据干扰
+            appearedTags.clear();
+            
             const savedEvents = localStorage.getItem("ocDailyEvents");
             if (!savedEvents) {
                 const eventsWithMeta = INIT_EVENTS.map((event) => ({
                     id: event.id,
                     text: event.text,
-                    tags: event.tags,
+                    tags: event.tags || [],
                     createTime: new Date().toLocaleString()
                 }));
                 localStorage.setItem("ocDailyEvents", JSON.stringify(eventsWithMeta));
@@ -473,13 +476,23 @@
             } else {
                 remainingEvents = JSON.parse(savedEvents);
             }
+            
             initTagRecommend();
+            
             const savedDrawnEvents = localStorage.getItem("ocDrawnEvents");
             if (savedDrawnEvents) {
                 drawnEvents = JSON.parse(savedDrawnEvents);
+                // 只收集已抽事件中存在的Tag（过滤无效Tag）
                 drawnEvents.forEach(event => {
-                    event.tags.forEach(tag => appearedTags.add(tag));
+                    (event.tags || []).forEach(tag => {
+                        // 只添加TAG_CATEGORIES里存在的Tag，避免脏数据
+                        const isTagValid = Object.values(TAG_CATEGORIES).some(cat => cat.includes(tag));
+                        if (isTagValid) {
+                            appearedTags.add(tag);
+                        }
+                    });
                 });
+                // 显示已出现的Tag（仅显示抽到的）
                 showAppearedTags();
                 renderHistoryList(drawnEvents);
             }
@@ -492,7 +505,16 @@
         function saveDrawnEventToDB(event) {
             drawnEvents.push(event);
             localStorage.setItem("ocDrawnEvents", JSON.stringify(drawnEvents));
-            event.tags.forEach(tag => appearedTags.add(tag));
+            
+            // 只收集当前抽到的、且在TAG_CATEGORIES里的Tag
+            (event.tags || []).forEach(tag => {
+                const isTagValid = Object.values(TAG_CATEGORIES).some(cat => cat.includes(tag));
+                if (isTagValid) {
+                    appearedTags.add(tag);
+                }
+            });
+            
+            // 只显示本次抽到的Tag，而非所有已出现的
             showAppearedTags();
         }
 
@@ -504,7 +526,7 @@
             drawnEvents = [];
             selectedTags = [];
             filterLogic = "and";
-            appearedTags.clear();
+            appearedTags.clear(); // 清空已出现的Tag
             drawnEventIds.clear();
             document.getElementById("andSwitch").classList.add("active");
             document.getElementById("orSwitch").classList.remove("active");
@@ -536,8 +558,9 @@
             progressText.textContent = `本轮进度：${drawnEventIds.size}/${allEventIds.length}`;
         }
 
-        // ====================== 第五步：Tag按需显示 ======================
+        // ====================== 第五步：Tag按需显示（核心修复） ======================
         function initTagList() {
+            // 渲染所有Tag，但默认隐藏
             renderTagList("roleTagList", TAG_CATEGORIES.role, "tag-role");
             renderTagList("orgTagList", TAG_CATEGORIES.org, "tag-org");
             renderTagList("sceneTagList", TAG_CATEGORIES.scene, "tag-scene");
@@ -546,20 +569,42 @@
         function renderTagList(containerId, tags, className) {
             const container = document.getElementById(containerId);
             container.innerHTML = "";
+            
             tags.forEach(tag => {
+                // 生成安全的ID（替换特殊字符，避免匹配失败）
+                const safeTagId = `tag-${tag.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}`;
+                
                 const tagItem = document.createElement("div");
                 tagItem.className = `tag-item ${className}`;
                 tagItem.textContent = tag;
-                tagItem.id = `tag-${tag}`;
+                tagItem.id = safeTagId; // 使用安全ID
+                tagItem.dataset.tag = tag; // 存储原始Tag名称
                 tagItem.onclick = () => toggleTagSelection(tag, tagItem);
                 container.appendChild(tagItem);
             });
         }
 
+        // 修复：只显示抽到的Tag，其他保持隐藏
         function showAppearedTags() {
+            // 先隐藏所有Tag
+            document.querySelectorAll(".tag-item").forEach(item => {
+                item.style.display = "none";
+            });
+            
+            // 只显示抽到的Tag
             appearedTags.forEach(tag => {
-                const tagElement = document.getElementById(`tag-${tag}`);
-                if (tagElement) tagElement.style.display = "inline-block";
+                // 根据安全ID查找，或通过data-tag匹配
+                const safeTagId = `tag-${tag.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}`;
+                let tagElement = document.getElementById(safeTagId);
+                
+                // 兜底：如果ID匹配失败，通过data-tag查找
+                if (!tagElement) {
+                    tagElement = document.querySelector(`.tag-item[data-tag="${tag}"]`);
+                }
+                
+                if (tagElement) {
+                    tagElement.style.display = "inline-block";
+                }
             });
         }
 
@@ -577,8 +622,10 @@
 
         function initTagRecommend() {
             const allEvents = getAllEventsFromDB();
+            tagRecommendMap = {}; // 重置推荐映射
+            
             allEvents.forEach(event => {
-                const tags = event.tags;
+                const tags = event.tags || [];
                 tags.forEach(tag1 => {
                     if (!tagRecommendMap[tag1]) tagRecommendMap[tag1] = {};
                     tags.forEach(tag2 => {
@@ -594,15 +641,26 @@
             document.querySelectorAll(".tag-item").forEach(item => {
                 item.classList.remove("recommend");
             });
+            
             const recommendTags = tagRecommendMap[activeTag];
             if (!recommendTags) return;
+            
             const sortedTags = Object.entries(recommendTags)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 3)
                 .map(item => item[0]);
+            
             sortedTags.forEach(tag => {
-                const tagElement = document.getElementById(`tag-${tag}`);
-                if (tagElement) tagElement.classList.add("recommend");
+                const safeTagId = `tag-${tag.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}`;
+                let tagElement = document.getElementById(safeTagId);
+                
+                if (!tagElement) {
+                    tagElement = document.querySelector(`.tag-item[data-tag="${tag}"]`);
+                }
+                
+                if (tagElement) {
+                    tagElement.classList.add("recommend");
+                }
             });
         }
 
@@ -618,11 +676,11 @@
             if (selectedTags.length > 0) {
                 if (filterLogic === "and") {
                     filteredEvents = filteredEvents.filter(event => 
-                        selectedTags.every(tag => event.tags.includes(tag))
+                        (event.tags || []).every(tag => selectedTags.includes(tag))
                     );
                 } else {
                     filteredEvents = filteredEvents.filter(event => 
-                        selectedTags.some(tag => event.tags.includes(tag))
+                        (event.tags || []).some(tag => selectedTags.includes(tag))
                     );
                 }
             }
@@ -641,7 +699,7 @@
             renderHistoryList(drawnEvents);
         }
 
-        // ====================== 第六步：抽签核心功能（重点修改） ======================
+        // ====================== 第六步：抽签核心功能 ======================
         function drawLottery() {
             const drawBtn = document.getElementById("drawBtn");
             const resultElement = document.getElementById("result");
@@ -668,7 +726,7 @@
                 // 1. 按钮变灰不可点击
                 drawBtn.disabled = true;
                 // 2. 显示指定文案
-                resultElement.textContent = "便签盒空空如也——可点击Tags查看分类便签：）";
+                resultElement.textContent = "更多未来正在发生——";
                 resultElement.classList.add("show");
                 // 3. 标记为重置状态
                 isResetting = true;
@@ -677,7 +735,7 @@
                 countdownTimer = setInterval(() => {
                     countdown--;
                     // 显示倒计时文案
-                    resultElement.textContent = `便签盒空空如也——可点击Tags查看分类便签：）${countdown}s`;
+                    resultElement.textContent = `更多未来正在发生—— ${countdown}s`;
                     // 倒计时结束
                     if (countdown <= 0) {
                         clearInterval(countdownTimer);
@@ -685,7 +743,7 @@
                         drawBtn.disabled = false;
                         drawBtn.textContent = "重新抽取";
                         // 最终文案
-                        resultElement.textContent = "更多未来正在发生";
+                        resultElement.textContent = "更多未来正在发生——";
                     }
                 }, 1000);
                 return;
@@ -722,7 +780,7 @@
                 
                 const tagBadge = document.createElement("div");
                 tagBadge.className = "history-tag-badge";
-                event.tags.forEach(tag => {
+                (event.tags || []).forEach(tag => {
                     const tagSpan = document.createElement("span");
                     tagSpan.className = "history-tag";
                     tagSpan.textContent = tag;
@@ -744,7 +802,7 @@
         }
 
         function confirmClearHistory() {
-            if (confirm("⚠️ ⚠️ 确认销毁所有已阅便签记录？\n此操作不可恢复，且仅清空本设备记录！")) {
+            if (confirm("⚠️ 确认销毁所有已阅便签记录？\n此操作不可恢复，且仅清空本设备记录！")) {
                 clearAllHistory();
                 alert("已销毁所有便签记录～");
             }
@@ -762,6 +820,8 @@
             isResetting = false;
             clearAllFilter();
             renderHistoryList([]);
+            
+            // 清空后隐藏所有Tag
             document.querySelectorAll(".tag-item").forEach(item => {
                 item.style.display = "none";
             });
